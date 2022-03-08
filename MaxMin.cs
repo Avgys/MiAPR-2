@@ -11,18 +11,15 @@ using MiAPR.Models;
 using Vector = MiAPR.Models.Vector;
 
 namespace MiAPR
-{   
-
-    public class MainLogic
+{
+    public class MaxMin
     {
         private readonly Canvas _canvas;
         private List<Vector> _points;
-        //private List<Vector> _centers;
-        //private List<List<Vector>> _pointsClasses;
         private List<Cluster> _clusters { get; set; }
         private readonly List<SolidColorBrush> brushes;
 
-        public MainLogic(Canvas canvas)
+        public MaxMin(Canvas canvas)
         {
             brushes = new List<SolidColorBrush>()
             {
@@ -44,8 +41,8 @@ namespace MiAPR
         {
             _points.Clear();
             _canvas.Children.Clear();
-            _clusters.Clear();                        
-            
+            _clusters.Clear();
+
             //Gen Points
             numP = numP % 100000;
             if (numP < 10000)
@@ -61,8 +58,8 @@ namespace MiAPR
             Ellipse elipse;
             for (int i = 0; i < numP; i++)
             {
-                vector = new Vector(rand.Next((int)Math.Floor(_canvas.ActualWidth)), rand.Next((int)Math.Floor(_canvas.ActualHeight)));    
-                
+                vector = new Vector(rand.Next((int)Math.Floor(_canvas.ActualWidth)), rand.Next((int)Math.Floor(_canvas.ActualHeight)));
+
                 elipse = new Ellipse();
                 elipse.Width = 2;
                 elipse.Height = 2;
@@ -73,7 +70,7 @@ namespace MiAPR
                 _canvas.Children.Add(elipse);
                 _points.Add(vector);
             }
-                      
+
 
             var centerId = rand.Next(_points.Count);
             vector = _points[centerId];
@@ -89,37 +86,75 @@ namespace MiAPR
             SeparateZones();
         }
 
-        public List<Vector> GetFutherestInClass() {
-            var list = new List<List<Vector>>();
-
+        public bool UpdateCenters()
+        {
+            bool flag = false;
             for (int i = 0; i < _clusters.Count; i++)
             {
+                double sumX = 0;
+                double sumY = 0;
+                for (int k = 0; k < _clusters[i].Vectors.Count; k++)
+                {
+                    sumX += _clusters[i].Vectors[k].X;
+                    sumY += _clusters[i].Vectors[k].Y;
+                }
 
+                var x = Math.Floor(sumX / _clusters[i].Vectors.Count);
+                if (_clusters[i].Center.X != x)
+                {
+                    flag = true;
+                }
+                _clusters[i].Center.X = x;
+                var y = Math.Floor(sumY / _clusters[i].Vectors.Count);
+                if (_clusters[i].Center.Y != y)
+                {
+                    flag = true;
+                }
+                _clusters[i].Center.Y = y;
+                _clusters[i].Center.Ellipse.Margin = new Thickness(_clusters[i].Center.X - 3, _clusters[i].Center.Y - 3, 0, 0);
             }
+
+            SeparateZones();
+            return flag;
+        }
+
+        public double GetAverageCenterDist()
+        {
+            double distSum = 0;
+            for (int i = 0; i < _clusters.Count; i++)
+            {
+                for (int j = i + 1; j < _clusters.Count; j++)
+                {
+                    distSum += GetDistance(_clusters[i].Center, _clusters[j].Center);
+                }
+            }
+            var count = Enumerable.Range(1, _clusters.Count - 1).Sum();
+            return count == 0 ? 0 : distSum / count;
         }
 
         public bool CreateNewCenter()
         {
+            bool flag = false;
             if (_clusters.Count == 1)
             {
                 var center = _clusters[0].Center;
 
                 //Find futherest point to center
-                double maxDest = GetDistance(center, _points[0]);
+                double maxDest = 0;
                 Vector vector = _points[0];
-                for (int i = 1; i < _points.Count; i++)
+                for (int i = 0; i < _points.Count; i++)
                 {
                     double dst = GetDistance(center, _points[i]);
                     if (dst > maxDest)
                     {
                         maxDest = dst;
-                        vector = _points[1];
+                        vector = _points[i];
                     }
                 }
 
                 Cluster cluster = new()
                 {
-                    Id = 1,
+                    Id = _clusters.Count,
                     Center = vector
                 };
                 cluster.ellipse.Stroke = brushes[cluster.Id];
@@ -127,52 +162,69 @@ namespace MiAPR
                 vector.ClusterOwner = cluster;
                 _canvas.Children.Add(cluster.ellipse);
                 _clusters.Add(cluster);
-
+                flag = true;
             }
             else
             {
-                var points = GetFutherestInClass();
-                double maxDest = GetDistance(center, _points[0]);
-                Vector vector = _points[0];
-                for (int i = 1; i < _points.Count; i++)
+                var averageCenterDistance = GetAverageCenterDist();
+                var points = GetFutherestClusterPoints();
+                var newCenterCandidate = GetFutherestPoint(points);
+                if (newCenterCandidate.dist > averageCenterDistance / 2)
                 {
-                    double dst = GetDistance(center, _points[i]);
-                    if (dst > maxDest)
+                    Cluster cluster = new()
                     {
-                        maxDest = dst;
-                        vector = _points[1];
-                    }
+                        Id = _clusters.Count,
+                        Center = newCenterCandidate.vector
+                    };
+                    cluster.ellipse.Stroke = brushes[cluster.Id];
+                    cluster.setEllipseMargin(cluster.Center);
+                    cluster.Center.ClusterOwner = cluster;
+                    _canvas.Children.Add(cluster.ellipse);
+                    _clusters.Add(cluster);
+                    flag = true;
+                }
+
+                SeparateZones();
+            }
+
+            return flag;
+        }
+
+        private (Vector vector, double dist) GetFutherestPoint(IEnumerable<(Vector vector, double dist)> ps)
+        {
+            (Vector vector, double dist) pt;
+            pt.dist = 0;
+            pt.vector = null;
+            foreach(var point in ps)
+            {
+                if (point.dist > pt.dist)
+                {
+                    pt = point;
                 }
             }
 
-            //bool flag = false;
-            //for (int i = 0; i < _pointsClasses.Count; i++)
-            //{
-            //    double sumX = 0;
-            //    double sumY = 0;
-            //    for (int k = 0; k < _pointsClasses[i].Count; k++)
-            //    {
-            //        sumX += _pointsClasses[i][k].X;
-            //        sumY += _pointsClasses[i][k].Y;
-            //    }
+            return pt;
+        }
 
-            //    var x = Math.Floor(sumX / _pointsClasses[i].Count);
-            //    if (_centers[i].X != x)
-            //    {
-            //        flag = true;
-            //    }
-            //    _centers[i].X = x;
-            //    var y = Math.Floor(sumY / _pointsClasses[i].Count);
-            //    if (_centers[i].Y != y)
-            //    {
-            //        flag = true;
-            //    }
-            //    _centers[i].Y = y;
-            //    _centers[i].Ellipse.Margin = new Thickness(_centers[i].X - 3, _centers[i].Y - 3, 0, 0);
-            //}
+        private IEnumerable<(Vector vector, double dist)> GetFutherestClusterPoints()
+        {
+            return _clusters.Select(GetFutherestPointInCluster);
+        }
 
-            SeparateZones();
-            return false;
+        private (Vector, double) GetFutherestPointInCluster(Cluster cluster)
+        {
+            double maxDist = 0;
+            Vector vector = null;
+            for (int i = 0; i < cluster.Vectors.Count; i++)
+            {
+                double dist = GetDistance(cluster.Vectors[i], cluster.Center);
+                if(maxDist < dist)
+                {
+                    maxDist = dist;
+                    vector = cluster.Vectors[i];
+                }
+            }
+            return (vector, maxDist);
         }
 
         public double GetDistance(Vector point1, Vector point2)
@@ -208,8 +260,7 @@ namespace MiAPR
                     }
                 }
                 _points[i].ClusterOwner.Vectors.Add(_points[i]);
-                _points[i].Ellipse.Stroke = brushes[_points[i].ClusterOwner.Id];
-                
+                _points[i].Ellipse.Stroke = brushes[_points[i].ClusterOwner.Id];                
             }
         }
     }

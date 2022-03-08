@@ -21,12 +21,12 @@ namespace MiAPR
     /// </summary>
     public partial class MainWindow : Window
     {
-        private MainLogic mainLogic;
+        private MaxMin mainLogic;
 
         public MainWindow()
         {
             InitializeComponent();
-            mainLogic = new MainLogic(MyCanva);
+            mainLogic = new MaxMin(MyCanva);
         }
 
         private void Button_Click(object sender, RoutedEventArgs e)
@@ -36,12 +36,13 @@ namespace MiAPR
 
         private void Button_Click_1(object sender, RoutedEventArgs e)
         {
-            mainLogic.UpdatePoints();
+            mainLogic.CreateNewCenter();
         }
 
         private void Button_Click_2(object sender, RoutedEventArgs e)
         {
-            while (mainLogic.UpdatePoints()) ;
+            while (mainLogic.CreateNewCenter());
+            while (mainLogic.UpdateCenters());
         }
     }
 }
